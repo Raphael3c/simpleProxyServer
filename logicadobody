@@ -1,0 +1,6 @@
+  let body = testeAA.split('\r\n')
+  body = body[body.length-1]
+
+  console.log(body)
+
+  var testeBB = `HTTP/1.1 200 OK\r\n\r\n${body}`
