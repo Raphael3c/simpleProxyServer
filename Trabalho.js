@@ -33,25 +33,24 @@ function handlePath(path){
 
 function isExpired(data){
   let { headers, ...teste}  = handleReq(data)
-      let [weekDay, dayMonth, month, year, hours, minutes, seconds] = headers.Date.split(" ")
+  let [weekDay, dayMonth, month, year, hours, minutes, seconds] = headers.Date.split(" ")
 
-      let date = new Date()
+  let date = new Date()
 
-      let newDateNow = new Date(0, 0, 0, date.getUTCHours(), date.getUTCMinutes(), 0)
-      let datePast = new Date(0, 0, 0, hours, minutes, 0)       
-      var diff = newDateNow.getTime() - datePast.getTime();
-      var hoursTeste = Math.floor(diff / 1000 / 60 / 60);
-      diff -= hoursTeste * 1000 * 60 * 60;
-      var minutesTeste = Math.floor(diff / 1000 / 60);
+  let newDateNow = new Date(0, 0, 0, date.getUTCHours(), date.getUTCMinutes(), 0)
+  let datePast = new Date(0, 0, 0, hours, minutes, 0)       
+  var diff = newDateNow.getTime() - datePast.getTime();
+  var hoursTeste = Math.floor(diff / 1000 / 60 / 60);
+  diff -= hoursTeste * 1000 * 60 * 60;
+  var secondsBetween = Math.floor(diff / 1000 / 60) * 60;
 
-      if(minutesTeste > 2){
-        return true
-      }
+  if(secondsBetween >= process.argv[2]){
+    return true
+  }
 
-      return false
-    
+  return false
 }
-//let htmlToInject2 = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache:</p>'
+
 function injectHTMLNova(data){
 
   let stringData = String(data)
@@ -74,16 +73,26 @@ function injectHTMLNova(data){
         contentLength += stringData[index][i]
       }
       let intContentLenght = parseInt(contentLength);
-      intContentLenght = intContentLenght + 154
+      intContentLenght = intContentLenght + 177
       intContentLenght = intContentLenght.toString()
 
       stringData[index] = stringData[index].replace(contentLength, intContentLenght)
+      break
     }
   }
   body = body.split("\n")
   let indexTagClosedBody = body.indexOf('</body>')
 
-  let htmlToInject = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Nova:</p>'
+  var dataDoPC = new Date();
+  // Guarda cada pedaço em uma variável
+  var dia     = dataDoPC.getDate();           // 1-31
+  var mes     = dataDoPC.getMonth() + 1;          // 0-11 (zero=janeiro)
+  var ano4    = dataDoPC.getFullYear();       // 4 dígitos
+  var hora    = dataDoPC.getHours();          // 0-23
+  var min     = dataDoPC.getMinutes();        // 0-59 
+  var seg     = dataDoPC.getSeconds();        // 0-59
+
+  let htmlToInject = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Nova em: ${ano4}-${mes}-${dia} ${hora}:${min}:${seg}</p>`
 
   let requisicaoNova = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject)
 
@@ -112,16 +121,25 @@ function injectHTMLCache(data){
         contentLength += stringData[index][i]
       }
       let intContentLenght = parseInt(contentLength);
-      intContentLenght = intContentLenght + 155
+      intContentLenght = intContentLenght + 175
       intContentLenght = intContentLenght.toString()
 
       stringData[index] = stringData[index].replace(contentLength, intContentLenght)
+      break
     }
   }
   body = body.split("\n")
   let indexTagClosedBody = body.indexOf('</body>')
+  var dataDoPC = new Date();
+  // Guarda cada pedaço em uma variável
+  var dia     = dataDoPC.getDate();           // 1-31
+  var mes     = dataDoPC.getMonth() + 1;          // 0-11 (zero=janeiro)
+  var ano4    = dataDoPC.getFullYear();       // 4 dígitos
+  var hora    = dataDoPC.getHours();          // 0-23
+  var min     = dataDoPC.getMinutes();        // 0-59 
+  var seg     = dataDoPC.getSeconds();        // 0-59
 
-  let htmlToInject2 = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache:</p>'
+  let htmlToInject2 = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache: ${ano4}-${mes}-${dia} ${hora}:${min}:${seg}</p>`
 
   let requisicaoCache = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject2)
 
@@ -174,8 +192,8 @@ server.on("connection", (proxy) => {
 
     const quote1 = `${domain}%${path}`
 
-    await fs.readFile(`./${quote1}`, async (isNotFile, data) => {
-      //Se o não arquivo existir ele entre no if e busca a página.Se não, ele apenas pega o que está em cache e joga de volta.
+    fs.readFile(`./${quote1}`, (isNotFile, data) => {
+      //Se o arquivo não existir ele entra no if e busca a página. Se não, ele apenas pega o que está em cache e joga de volta.
       
       if(isNotFile){
         //Função que pede a pagina ao servidor e armazena em cache.
@@ -186,7 +204,7 @@ server.on("connection", (proxy) => {
       if(isExpired(data)){
         const path = absolutePath.replace('/','%')
         const quote = `${domain}%${path}`
-        await fs.rm(`./${quote}`, () => {
+        fs.rm(`./${quote}`, () => {
           console.log(`${quote} removido do cache. Estrapolou o limite`)
         })
         getPage(domain, absolutePath, proxy)
@@ -208,7 +226,7 @@ server.on("connection", (proxy) => {
   })
 })
 
-async function getPage(domain, absolutePath, proxy){
+function getPage(domain, absolutePath, proxy){
   console.log(`O site ${domain}/${absolutePath} não estava em cache`)
   var client = net.createConnection(80, domain)
 
