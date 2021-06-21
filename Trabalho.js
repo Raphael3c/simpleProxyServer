@@ -51,30 +51,114 @@ function isExpired(data){
       return false
     
 }
+//let htmlToInject2 = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache:</p>'
+function injectHTMLNova(data){
 
-function injectHTML(data){
-  const htmlCache = '<p style="z-index:9999; position:fixed; top:20px; left:20px; width:200px; height:100px; background-color:yellow; padding:10px; font-weight:bold;">O de Cache</p>' 
-  const htmlNovo = '<p style="z-index:9999; position:fixed; top:20px; left:20px; width:200px; height:100px; background-color:yellow; padding:10px; font-weight:bold;">O novo</p>'
-  
-  let teste = data.toString().split('\n')
+  let stringData = String(data)
 
-  let testeNovo = data.toString().split('\n')
-
-  let index = teste.indexOf('</body>')    
-  let indexNovo = testeNovo.indexOf('</body>')
-
-  teste[index-1] += `\n${htmlCache}`
-  testeNovo[indexNovo-1] += `\n${htmlNovo}`
-  var testeAA = ''
-  var testeBB = ''
-  for(indexTeste in teste){
-    if(teste[indexTeste].includes("Content-Length")) continue;
-    teste[indexTeste] += "\n"
-    testeAA += teste[indexTeste]
+  if(!stringData.includes('html')){
+    return data
   }
+
+  stringData = stringData.split("\r\n")
+
+  let body = stringData[stringData.length-1]
+
+  stringData[stringData.length-1] = ''
   
-  console.log(testeAA)
-  return testeAA;
+  for(index in stringData){
+    if(stringData[index].includes("Content-Length")){
+      controle = 1
+      let contentLength = ''
+      for(i=16; i < stringData[index].length; i++){
+        contentLength += stringData[index][i]
+      }
+      let intContentLenght = parseInt(contentLength);
+      intContentLenght = intContentLenght + 154
+      intContentLenght = intContentLenght.toString()
+
+      stringData[index] = stringData[index].replace(contentLength, intContentLenght)
+    }
+  }
+  body = body.split("\n")
+  let indexTagClosedBody = body.indexOf('</body>')
+
+  let htmlToInject = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Nova:</p>'
+
+  let requisicaoNova = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject)
+
+  return requisicaoNova
+}
+
+function injectHTMLCache(data){
+
+  let stringData = String(data)
+
+  if(!stringData.includes('html')){
+    return data
+  }
+
+  stringData = stringData.split("\r\n")
+
+  let body = stringData[stringData.length-1]
+
+  stringData[stringData.length-1] = ''
+  
+  for(index in stringData){
+    if(stringData[index].includes("Content-Length")){
+      controle = 1
+      let contentLength = ''
+      for(i=16; i < stringData[index].length; i++){
+        contentLength += stringData[index][i]
+      }
+      let intContentLenght = parseInt(contentLength);
+      intContentLenght = intContentLenght + 155
+      intContentLenght = intContentLenght.toString()
+
+      stringData[index] = stringData[index].replace(contentLength, intContentLenght)
+    }
+  }
+  body = body.split("\n")
+  let indexTagClosedBody = body.indexOf('</body>')
+
+  let htmlToInject2 = '\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache:</p>'
+
+  let requisicaoCache = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject2)
+
+  return requisicaoCache
+}
+
+function realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject){
+  let bodyAux = ''
+  let requisicao = ''
+
+  if(indexTagClosedBody != -1){
+    body[indexTagClosedBody-1] += htmlToInject
+  
+    for(index in body){
+      bodyAux += `${body[index]}\n` 
+    }
+  
+    stringData[stringData.length-1] = bodyAux;
+  
+    for(index in stringData){
+      requisicao += `${stringData[index]}\r\n`
+    }
+
+    return requisicao
+  }
+
+  for(index in body){
+    bodyAux += `${body[index]}\n` 
+  }
+
+  stringData[stringData.length-1] = bodyAux;
+
+  for(index in stringData){
+    requisicao += `${stringData[index]}\r\n`
+  }
+
+  return requisicao
 }
 
 server.on("connection", (proxy) => {
@@ -134,18 +218,18 @@ async function getPage(domain, absolutePath, proxy){
         client.write(buffer)
       })
 
-      client.on("data", (data) => {
+      client.on("data", async (data) => {
         const path = absolutePath.replace('/','%')
         const quote = `${domain}%${path}`
+        
+        let requisicaoNova = injectHTMLNova(data)
+        let requisicaoCache = injectHTMLCache(data)
 
-        var dataModified = injectHTML(data);
-
-        fs.appendFile(`./${quote}`, dataModified, (err) => {
+        fs.appendFile(`./${quote}`, requisicaoCache, (err) => {
           if(err) throw err
-        })
+        })   
 
-        proxy.write(dataModified)
-        proxy.end()
+        proxy.write(requisicaoNova)
       })
 
       client.on("end", () => {
