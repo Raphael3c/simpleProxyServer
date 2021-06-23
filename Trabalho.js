@@ -1,12 +1,10 @@
 var net = require("net")
 var fs = require('fs')
-//PRECISO FAZER COM QUE O MEU PROGRAMA ACEITE PARÂMETROS MANDADOS ATRAVÉS DA LINHA DE COMANDO:
-//VER:
-//https://www.ti-enxame.com/pt/javascript/como-faco-para-passar-argumentos-de-linha-de-comando-para-um-programa-node.js/970510029/
-var server = net.createServer().listen(8888)
 
-function handleReq(data){
-  const [firstLine, ...otherLines] = data.toString().split('\n');
+var proxy = net.createServer().listen(8888)
+
+function handleReq(dataFromBrowser){
+  const [firstLine, ...otherLines] = dataFromBrowser.toString().split('\n');
         const [method, path, httpVersion] = firstLine.trim().split(' ');
         const headers = Object.fromEntries(otherLines.filter(_=>_)
             .map(line=>line.split(':').map(part=>part.trim()))
@@ -21,135 +19,134 @@ function handleReq(data){
 }
 
 function handlePath(path){
-    let [b, ...otherPaths] = path.split("/")
+    let [ , ...otherPaths] = path.split("/")
     let [domain, ...absolutePathArray] = otherPaths;
     const absolutePath = absolutePathArray.toString().trim().replace(',','/')
-   /*  if(headersReferer != undefined){
-      domain = headersReferer.split("/")[3]
-    } */
-
+   
     return {absolutePath, domain}
 }
 
-function isExpired(data){
-  let { headers, ...teste}  = handleReq(data)
-  let [weekDay, dayMonth, month, year, hours, minutes, seconds] = headers.Date.split(" ")
+function isExpired(dataFromCache){
+  let {headers}  = handleReq(dataFromCache)
+  let [, , , , hours, minutes, ] = headers.Date.split(" ")
 
-  let date = new Date()
+  let dateNow = new Date()
 
-  let newDateNow = new Date(0, 0, 0, date.getUTCHours(), date.getUTCMinutes(), 0)
+  let newDateNow = new Date(0, 0, 0, dateNow.getUTCHours(), dateNow.getUTCMinutes(), 0)
   let datePast = new Date(0, 0, 0, hours, minutes, 0)       
-  var diff = newDateNow.getTime() - datePast.getTime();
-  var hoursTeste = Math.floor(diff / 1000 / 60 / 60);
-  diff -= hoursTeste * 1000 * 60 * 60;
-  var secondsBetween = Math.floor(diff / 1000 / 60) * 60;
+  
+  let timePassed = newDateNow.getTime() - datePast.getTime();
+  let hoursPassed = Math.floor(timePassed / 1000 / 60 / 60);
+  timePassed -= hoursPassed * 1000 * 60 * 60;
+  let secondsPassed = Math.floor(timePassed / 1000 / 60) * 60;
 
-  if(secondsBetween >= process.argv[2]){
+  let commandLineArgument = process.argv[2]
+  commandLineArgument = Number(commandLineArgument)
+  if(secondsPassed >= commandLineArgument){
     return true
   }
 
   return false
 }
 
-function injectHTMLNova(data){
+function getLocalDate(){
+  var localDate = new Date();
 
-  let stringData = String(data)
+  var dayMonth = localDate.getDate(); // 1-31
+  var month = localDate.getMonth() + 1; // 0-11 (zero=janeiro)
+  var year = localDate.getFullYear();
+  var hour = localDate.getHours();
+  var min = localDate.getMinutes();
+  var sec = localDate.getSeconds();
 
+  return {
+    dayMonth, 
+    month,
+    year,
+    hour,
+    min,
+    sec
+  }
+}
+
+function injectHTML(dataExternalServer){
+
+  let stringData = String(dataExternalServer)
+  let stringDataCopy = String(dataExternalServer)
+
+  let requisitionNew
+  let requisitionCache
+
+  //Caso o arquivo não seja um HTML.
   if(!stringData.includes('html')){
-    return data
+    requisitionNew = dataExternalServer
+    requisitionCache = dataExternalServer
+    return {
+      requisitionNew,
+      requisitionCache
+    }
   }
 
+  let {dayMonth, month, year, hour, min, sec} = getLocalDate()
+
+  let htmlToInjectNew = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Nova em: ${year}-${month}-${dayMonth} ${hour}:${min}:${sec}</p>`
+  let htmlToInjectCache = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache: ${year}-${month}-${dayMonth} ${hour}:${min}:${sec}</p>`
+
   stringData = stringData.split("\r\n")
+  stringDataCopy = stringDataCopy.split("\r\n")
 
   let body = stringData[stringData.length-1]
+  let bodyCopy = stringDataCopy[stringDataCopy.length-1]
 
   stringData[stringData.length-1] = ''
+  stringDataCopy[stringDataCopy.length-1] = ''
   
   for(index in stringData){
     if(stringData[index].includes("Content-Length")){
-      controle = 1
       let contentLength = ''
+      let contentLengthCopy = ''
+
       for(i=16; i < stringData[index].length; i++){
         contentLength += stringData[index][i]
+        contentLengthCopy += stringDataCopy[index][i]
       }
-      let intContentLenght = parseInt(contentLength);
-      intContentLenght = intContentLenght + 177
-      intContentLenght = intContentLenght.toString()
 
-      stringData[index] = stringData[index].replace(contentLength, intContentLenght)
+      let intContentLength = parseInt(contentLength);
+      intContentLength = intContentLength + htmlToInjectNew.length
+      let stringNewContentLength = intContentLength.toString()
+
+      let intContentLengthCopy = parseInt(contentLengthCopy);
+      intContentLengthCopy = intContentLengthCopy + htmlToInjectCache.length
+      let stringNewContentLengthCopy = intContentLengthCopy.toString()
+
+      stringData[index] = stringData[index].replace(contentLength, stringNewContentLength)
+      stringDataCopy[index] = stringDataCopy[index].replace(contentLengthCopy, stringNewContentLengthCopy)
       break
     }
   }
+
   body = body.split("\n")
+  bodyCopy = bodyCopy.split("\n")
+
   let indexTagClosedBody = body.indexOf('</body>')
-
-  var dataDoPC = new Date();
-  // Guarda cada pedaço em uma variável
-  var dia     = dataDoPC.getDate();           // 1-31
-  var mes     = dataDoPC.getMonth() + 1;          // 0-11 (zero=janeiro)
-  var ano4    = dataDoPC.getFullYear();       // 4 dígitos
-  var hora    = dataDoPC.getHours();          // 0-23
-  var min     = dataDoPC.getMinutes();        // 0-59 
-  var seg     = dataDoPC.getSeconds();        // 0-59
-
-  let htmlToInject = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Nova em: ${ano4}-${mes}-${dia} ${hora}:${min}:${seg}</p>`
-
-  let requisicaoNova = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject)
-
-  return requisicaoNova
-}
-
-function injectHTMLCache(data){
-
-  let stringData = String(data)
-
-  if(!stringData.includes('html')){
-    return data
-  }
-
-  stringData = stringData.split("\r\n")
-
-  let body = stringData[stringData.length-1]
-
-  stringData[stringData.length-1] = ''
+  let indexTagClosedBodyCopy = bodyCopy.indexOf('</body>')
   
-  for(index in stringData){
-    if(stringData[index].includes("Content-Length")){
-      controle = 1
-      let contentLength = ''
-      for(i=16; i < stringData[index].length; i++){
-        contentLength += stringData[index][i]
-      }
-      let intContentLenght = parseInt(contentLength);
-      intContentLenght = intContentLenght + 175
-      intContentLenght = intContentLenght.toString()
+  requisitionNew = concatenateAll(body, indexTagClosedBody, stringData, htmlToInjectNew)
+  requisitionCache = concatenateAll(bodyCopy, indexTagClosedBodyCopy, stringDataCopy, htmlToInjectCache)
 
-      stringData[index] = stringData[index].replace(contentLength, intContentLenght)
-      break
-    }
+  return {
+    requisitionNew,
+    requisitionCache
   }
-  body = body.split("\n")
-  let indexTagClosedBody = body.indexOf('</body>')
-  var dataDoPC = new Date();
-  // Guarda cada pedaço em uma variável
-  var dia     = dataDoPC.getDate();           // 1-31
-  var mes     = dataDoPC.getMonth() + 1;          // 0-11 (zero=janeiro)
-  var ano4    = dataDoPC.getFullYear();       // 4 dígitos
-  var hora    = dataDoPC.getHours();          // 0-23
-  var min     = dataDoPC.getMinutes();        // 0-59 
-  var seg     = dataDoPC.getSeconds();        // 0-59
-
-  let htmlToInject2 = `\n<p style="z-index:9999; position:fixed; top:20px; left:20px;width:200px;height:100px; background-color:yellow;padding:10px; font-weight:bold;">Cache: ${ano4}-${mes}-${dia} ${hora}:${min}:${seg}</p>`
-
-  let requisicaoCache = realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject2)
-
-  return requisicaoCache
 }
 
-function realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject){
+function concatenateAll(body, indexTagClosedBody, stringData, htmlToInject){
+  //A função apenas concatena todos os splits feitos até aqui.
+
   let bodyAux = ''
   let requisicao = ''
 
+  //Caso não aja </body>
   if(indexTagClosedBody != -1){
     body[indexTagClosedBody-1] += htmlToInject
   
@@ -179,41 +176,93 @@ function realInjectHTML(body, indexTagClosedBody, stringData, htmlToInject){
   return requisicao
 }
 
-server.on("connection", (proxy) => {
-  proxy.on('data', async (data) => {
-    let {method, path, httpVersion, headers} = handleReq(data)
+function getPage(domain, absolutePath, socketProxy){
+
+  console.log(`Searching for ${domain}/${absolutePath}  ... \n`)
+  
+  var client = net.createConnection(80, domain)
+
+  client.on("connect", () => {
+
+    console.log(`Client(port: ${client.localPort}) connected with ${domain}(${client.remoteAddress})\nReq: GET /${absolutePath}\n`)
+
+    let requisition = `GET /${absolutePath} HTTP/1.1\r\nHost: ${domain}\r\n\r\n`
+
+    requisition = Buffer.from(requisition)
+
+    client.write(requisition)
+
+  })
+
+  client.on("data", (dataExternalServer) => {
+    const path = absolutePath.replace('/','%')
+    const nameInCache = `${domain}%${path}`
+    
+    let {requisitionNew, requisitionCache} = injectHTML(dataExternalServer)
+
+    fs.appendFile(`./${nameInCache}`, requisitionCache, (err) => {})   
+
+    socketProxy.write(requisitionNew)
+  })
+
+  client.on("end", () => {
+    console.log(`The connection with ${domain}(${client.remoteAddress}) has closed\n`)
+  })
+
+  client.on("error", (err) => {
+    console.log("Client Error")
+  })
+}
+
+// Fluxo principal
+
+proxy.on("connection", (socketProxy) => {
+  socketProxy.on('data', (dataFromBrowser) => {
+    
+    //let {method, path, httpVersion, headers} = handleReq(dataFromBrowser)
+    let {method, path, headers} = handleReq(dataFromBrowser)
     let {absolutePath, domain} = handlePath(path)
 
+    if(method != "GET"){
+      console.log(`Método ${method} inválido.`)
+      return
+    }
+
+    //Verifica se há o campo Referer no cabeçalho. 
+    //Se houver, o domínio será pego através desse campo.
     if(headers.Referer){
       domain = headers.Referer.split("/")[3]
     }
 
+    //Nomeação do arquivo em cache.
     path = absolutePath.replace('/','%')
 
-    const quote1 = `${domain}%${path}`
+    const nameInCache = `${domain}%${path}`
 
-    fs.readFile(`./${quote1}`, (isNotFile, data) => {
-      //Se o arquivo não existir ele entra no if e busca a página. Se não, ele apenas pega o que está em cache e joga de volta.
+    fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
       
+      //Se não existe, busca a página.
       if(isNotFile){
-        //Função que pede a pagina ao servidor e armazena em cache.
-        getPage(domain, absolutePath, proxy)
+        getPage(domain, absolutePath, socketProxy)
         return
       }
 
-      if(isExpired(data)){
+      //Se está expirado, busca a página.
+      if(isExpired(dataFromCache)){
         const path = absolutePath.replace('/','%')
-        const quote = `${domain}%${path}`
-        fs.rm(`./${quote}`, () => {
-          console.log(`${quote} removido do cache. Estrapolou o limite`)
+        const url = `${domain}%${path}`
+
+        fs.rm(`./${url}`, () => {
+          console.log(`${url} was removed from cache. Time expired.\n`)
         })
-        getPage(domain, absolutePath, proxy)
+
+        getPage(domain, absolutePath, socketProxy)
         return
       }     
 
-      console.log(`O site ${domain}/${absolutePath} estava em cache`)
-      proxy.write(data)
-      proxy.end()
+      console.log(`${domain}/${absolutePath} already in cache\n`)
+      socketProxy.write(dataFromCache)
+      socketProxy.end()
       return
     })
   })
@@ -225,36 +274,3 @@ server.on("connection", (proxy) => {
   proxy.on("error", (err) => {
   })
 })
-
-function getPage(domain, absolutePath, proxy){
-  console.log(`O site ${domain}/${absolutePath} não estava em cache`)
-  var client = net.createConnection(80, domain)
-
-      client.on("connect", () => {
-        console.log(`Client(port: ${client.localPort}) connected with ${domain}(${client.remoteAddress})\nReq: GET /${absolutePath}\n`)
-        let buffer = Buffer.from((`GET /${absolutePath} HTTP/1.1\r\nHost: ${domain}\r\n\r\n`))
-        client.write(buffer)
-      })
-
-      client.on("data", async (data) => {
-        const path = absolutePath.replace('/','%')
-        const quote = `${domain}%${path}`
-        
-        let requisicaoNova = injectHTMLNova(data)
-        let requisicaoCache = injectHTMLCache(data)
-
-        fs.appendFile(`./${quote}`, requisicaoCache, (err) => {
-          if(err) throw err
-        })   
-
-        proxy.write(requisicaoNova)
-      })
-
-      client.on("end", () => {
-        console.log(`Server ${domain}(${client.remoteAddress}) shutdown the connection\n`)
-      })
-
-      client.on("error", (err) => {
-        console.log("Client Error")
-      })
-}
