@@ -3,6 +3,13 @@ var fs = require('fs')
 
 var proxy = net.createServer().listen(8888)
 
+var COMMAND_LINE_ARGUMENT = process.argv[2]
+
+if(!isCorrect(COMMAND_LINE_ARGUMENT)){
+  console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 2 minutes.`)
+  COMMAND_LINE_ARGUMENT = 120
+}
+
 function handleReq(dataFromBrowser){
   const [firstLine, ...otherLines] = dataFromBrowser.toString().split('\n');
         const [method, path, httpVersion] = firstLine.trim().split(' ');
@@ -16,6 +23,15 @@ function handleReq(dataFromBrowser){
             httpVersion,
             headers,
         }
+}
+
+function isCorrect(COMMAND_LINE_ARGUMENT){
+  let regExp = /[^0-9]/g;   
+  if(regExp.test(COMMAND_LINE_ARGUMENT) || COMMAND_LINE_ARGUMENT == undefined || COMMAND_LINE_ARGUMENT == 0){
+    return false
+  }
+
+  return true
 }
 
 function handlePath(path){
@@ -40,9 +56,8 @@ function isExpired(dataFromCache){
   timePassed -= hoursPassed * 1000 * 60 * 60;
   let secondsPassed = Math.floor(timePassed / 1000 / 60) * 60;
 
-  let commandLineArgument = process.argv[2]
-  commandLineArgument = Number(commandLineArgument)
-  if(secondsPassed >= commandLineArgument){
+  COMMAND_LINE_ARGUMENT = Number(COMMAND_LINE_ARGUMENT)
+  if(secondsPassed >= COMMAND_LINE_ARGUMENT){
     return true
   }
 
@@ -180,7 +195,9 @@ function getPage(domain, absolutePath, socketProxy){
 
   console.log(`Searching for ${domain}/${absolutePath}  ... \n`)
   
-  var client = net.createConnection(80, domain)
+  const STANDART_PORT = 80
+
+  var client = net.createConnection(STANDART_PORT, domain)
 
   client.on("connect", () => {
 
@@ -200,7 +217,12 @@ function getPage(domain, absolutePath, socketProxy){
     
     let {requisitionNew, requisitionCache} = injectHTML(dataExternalServer)
 
-    fs.appendFile(`./${nameInCache}`, requisitionCache, (err) => {})   
+    fs.appendFile(`./${nameInCache}`, requisitionCache, (err) => {
+      if(err){
+        console.log(err)
+        return
+      }
+    })   
 
     socketProxy.write(requisitionNew)
   })
@@ -210,7 +232,10 @@ function getPage(domain, absolutePath, socketProxy){
   })
 
   client.on("error", (err) => {
-    console.log("Client Error")
+    if(err){
+      console.log(err)
+      return
+    }
   })
 }
 
@@ -272,5 +297,9 @@ proxy.on("connection", (socketProxy) => {
   })
 
   proxy.on("error", (err) => {
+    if(err){
+      console.log(err)
+      return
+    }
   })
 })
