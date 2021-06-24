@@ -1,22 +1,38 @@
 var net = require("net")
 var fs = require('fs')
 
+// Cria o servidor proxy na porta 8888
 var proxy = net.createServer().listen(8888)
 
+// Obtém o tempo digitado na linha de comando.
 var COMMAND_LINE_ARGUMENT = process.argv[2]
 
+// Verifica se o tempo digitado é válido, caso não seja, seta 120 segundos por padrão.
 if(!isCorrect(COMMAND_LINE_ARGUMENT)){
   console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 2 minutes.`)
   COMMAND_LINE_ARGUMENT = 120
 }
 
 function handleReq(dataFromBrowser){
+  /*
+    handleReq(Data) -> {String, String, String, String} 
+  
+    Manipula os dados recebidos do navegador armazenando em váriáveis úteis 
+    para uso futuro na aplicação. 
+  */
+
+  // Obetém todo o dado recebido do navegador, converte para String e separa por linhas.
   const [firstLine, ...otherLines] = dataFromBrowser.toString().split('\n');
+        
+        // Obtém da primeira linha o method, path e httpVersion.
         const [method, path, httpVersion] = firstLine.trim().split(' ');
+        
+        // Obtém de otherLines os headers. 
         const headers = Object.fromEntries(otherLines.filter(_=>_)
             .map(line=>line.split(':').map(part=>part.trim()))
             .map(([name, ...rest]) => [name, rest.join(' ')]));
 
+       // Retorna os dados manipulados amazenados em variáveis.
        return {
             method,
             path,
@@ -26,6 +42,13 @@ function handleReq(dataFromBrowser){
 }
 
 function isCorrect(COMMAND_LINE_ARGUMENT){
+  /*
+    isCorrect(COMMAND_LINE_ARGUMENT) -> Boolean
+
+    Essa função faz o tratamento do argumento que for digitado na linha de comando, 
+    garantindo que seja um valor inteiro e que seja maior que zero, retornando true quando tudo OK. 
+  */
+  
   let regExp = /[^0-9]/g;   
   if(regExp.test(COMMAND_LINE_ARGUMENT) || COMMAND_LINE_ARGUMENT == undefined || COMMAND_LINE_ARGUMENT == 0){
     return false
@@ -35,14 +58,27 @@ function isCorrect(COMMAND_LINE_ARGUMENT){
 }
 
 function handlePath(path){
-    let [ , ...otherPaths] = path.split("/")
-    let [domain, ...absolutePathArray] = otherPaths;
-    const absolutePath = absolutePathArray.toString().trim().replace(',','/')
+  /* 
+    handlePath(String) -> {String, String}
+
+    Manipula o caminho recebido, obtendo e retornando o Caminho Absoluto e o Domínio.
+  */  
+
+  let [ , ...otherPaths] = path.split("/")
+  let [domain, ...absolutePathArray] = otherPaths;
+  const absolutePath = absolutePathArray.toString().trim().replace(',','/')
    
-    return {absolutePath, domain}
+  return {absolutePath, domain}
 }
 
 function isExpired(dataFromCache){
+  /*
+    isExpired(Data) -> Boolean
+
+    Verifica se os dados guardados em Cache estão expirados, 
+    caso estreja expirado retorna true, caso contrário false.
+  */
+
   let {headers}  = handleReq(dataFromCache)
   let [, , , , hours, minutes, ] = headers.Date.split(" ")
 
@@ -57,6 +93,7 @@ function isExpired(dataFromCache){
   let secondsPassed = Math.floor(timePassed / 1000 / 60) * 60;
 
   COMMAND_LINE_ARGUMENT = Number(COMMAND_LINE_ARGUMENT)
+  
   if(secondsPassed >= COMMAND_LINE_ARGUMENT){
     return true
   }
@@ -65,6 +102,12 @@ function isExpired(dataFromCache){
 }
 
 function getLocalDate(){
+  /*
+    getLocalDate(null) -> Date
+
+    Obtém a data atual, manipula e armazena em variáveis.
+  */
+
   var localDate = new Date();
 
   var dayMonth = localDate.getDate(); // 1-31
@@ -156,12 +199,16 @@ function injectHTML(dataExternalServer){
 }
 
 function concatenateAll(body, indexTagClosedBody, stringData, htmlToInject){
-  //A função apenas concatena todos os splits feitos até aqui.
+  /*
+    concatenateAll(String, String, String, String) -> String
+
+    Essa função apenas concatena todos os splits feitos até aqui.
+  */
 
   let bodyAux = ''
   let requisicao = ''
 
-  //Caso não aja </body>
+  // Caso não haja </body>
   if(indexTagClosedBody != -1){
     body[indexTagClosedBody-1] += htmlToInject
   
