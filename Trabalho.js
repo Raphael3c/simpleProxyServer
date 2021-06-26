@@ -9,14 +9,13 @@ var COMMAND_LINE_ARGUMENT = process.argv[2]
 
 // Verifica se o tempo digitado é válido, caso não seja, seta 120 segundos por padrão.
 if(!isCorrect(COMMAND_LINE_ARGUMENT)){
-  // COLOCAR A CONDIÇÃO DE VERFICAR QUE NO MÁXIMO 120 segundos, não mais que isso 
-  console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 2 minutes.`)
+  console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 120 seconds.`)
   COMMAND_LINE_ARGUMENT = 120
 }
 
-function handleReq(dataFromBrowser){
+function handleRequisitionBrowser(dataFromBrowser){
   /*
-    handleReq(Data) -> {String, String, String, String} 
+    handleRequisitionBrowser(Data) -> {String, String, String, String} 
   
     Manipula os dados recebidos do navegador armazenando em váriáveis úteis 
     para uso futuro na aplicação. 
@@ -68,10 +67,10 @@ function handlePath(path){
   */  
 
   let [ , ...otherPaths] = path.split("/")
-  let [domain, ...absolutePathArray] = otherPaths;
-  const absolutePath = absolutePathArray.toString().trim().replace(',','/')
+  let [domain, ...pathToFileArray] = otherPaths;
+  const pathToFile = pathToFileArray.toString().trim().replace(',','/')
    
-  return {absolutePath, domain}
+  return {pathToFile, domain}
 }
 
 function isExpired(dataFromCache){
@@ -82,12 +81,15 @@ function isExpired(dataFromCache){
     caso estreja expirado retorna true, caso contrário false.
   */
 
-  let {headers}  = handleReq(dataFromCache)
+  let {headers}  = handleRequisitionBrowser(dataFromCache)
   let [, , , , hours, minutes, ] = headers.Date.split(" ")
 
   let dateNow = new Date()
 
-  let newDateNow = new Date(0, 0, 0, dateNow.getUTCHours(), dateNow.getUTCMinutes(), 0)
+  const utcHour = dateNow.getUTCHours()
+  const utcMinutes = dateNow.getUTCMinutes()
+
+  let newDateNow = new Date(0, 0, 0, utcHour, utcMinutes, 0)
   let datePast = new Date(0, 0, 0, hours, minutes, 0)       
   
   let timePassed = newDateNow.getTime() - datePast.getTime();
@@ -132,11 +134,16 @@ function getLocalDate(){
 
 function injectHTML(dataExternalServer){
   /*
-    injectHTML(Data) -> String
+    injectHTML(Data) -> {Bytes, Bytes}
+
+    Sugestão de mudança: (POR RAPHAEL) 
+    injectHTML(Bytes) -> {Bytes, Bytes}, o que nós recebemos e retornamos é um array de bytes.
+    No entanto, não sei exatamente como expor esse tipo de dado nessa descrição. Descobre ae :)
 
     Essa função manipula o cabeçalho e injeta o html do post-it na página requisitada. 
   */
 
+  console.log(typeof(dataExternalServer))
   let stringData = String(dataExternalServer)
   let stringDataCopy = String(dataExternalServer)
 
@@ -200,6 +207,9 @@ function injectHTML(dataExternalServer){
   requisitionNew = concatenateAll(body, indexTagClosedBody, stringData, htmlToInjectNew)
   requisitionCache = concatenateAll(bodyCopy, indexTagClosedBodyCopy, stringDataCopy, htmlToInjectCache)
 
+  requisitionNew = Buffer.from(requisitionNew)
+  requisitionCache = Buffer.from(requisitionCache)
+
   return {
     requisitionNew,
     requisitionCache
@@ -246,14 +256,14 @@ function concatenateAll(body, indexTagClosedBody, stringData, htmlToInject){
   return requisicao
 }
 
-function getPage(domain, absolutePath, socketProxy){
+function getPageAndStore(domain, pathToFile, socketProxy){
   /*
-    getPage(String, String, Socket) -> String
+    getPageAndStore(String, String, Socket) -> String
 
     Obtém a página requisitada.
   */
 
-  console.log(`Searching for ${domain}/${absolutePath}  ... \n`)
+  console.log(`Searching for ${domain}/${pathToFile}  ... \n`)
   
   const STANDART_PORT = 80
 
@@ -261,18 +271,17 @@ function getPage(domain, absolutePath, socketProxy){
 
   client.on("connect", () => {
 
-    console.log(`Client(port: ${client.localPort}) connected with ${domain}(${client.remoteAddress})\nReq: GET /${absolutePath}\n`)
+    console.log(`Client(port: ${client.localPort}) connected with ${domain}(${client.remoteAddress})\nReq: GET /${pathToFile}\n`)
 
-    let requisition = `GET /${absolutePath} HTTP/1.1\r\nHost: ${domain}\r\n\r\n`
+    let requisition = `GET /${pathToFile} HTTP/1.1\r\nHost: ${domain}\r\n\r\n`
 
     requisition = Buffer.from(requisition)
 
     client.write(requisition)
-
   })
 
   client.on("data", (dataExternalServer) => {
-    const path = absolutePath.replace('/','%')
+    const path = pathToFile.replace('/','%')
     const nameInCache = `${domain}%${path}`
     
     let {requisitionNew, requisitionCache} = injectHTML(dataExternalServer)
@@ -303,12 +312,18 @@ function getPage(domain, absolutePath, socketProxy){
 proxy.on("connection", (socketProxy) => {
   socketProxy.on('data', (dataFromBrowser) => {
     
-    //let {method, path, httpVersion, headers} = handleReq(dataFromBrowser)
-    let {method, path, headers} = handleReq(dataFromBrowser)
-    let {absolutePath, domain} = handlePath(path)
+    let {method, path, headers} = handleRequisitionBrowser(dataFromBrowser)
+    let {pathToFile, domain} = handlePath(path)
+
+    if(domain == ''){
+      console.log("URL invalid")
+      socketProxy.end()
+      return
+    }
 
     if(method != "GET"){
       console.log(`Método ${method} inválido.`)
+      socketProxy.end()
       return
     }
 
@@ -319,32 +334,33 @@ proxy.on("connection", (socketProxy) => {
     }
 
     // Nomeação do arquivo em cache.
-    path = absolutePath.replace('/','%')
+    pathToFile = pathToFile.replace('/','%')
 
-    const nameInCache = `${domain}%${path}`
+    const nameInCache = `${domain}%${pathToFile}`
 
     fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
       
-      // Se não existe, busca a página.
+      // Se não existe, busca a página e armazena em cache.
       if(isNotFile){
-        getPage(domain, absolutePath, socketProxy)
+        getPageAndStore(domain, pathToFile, socketProxy)
         return
       }
 
-      // Se está expirado, busca a página.
+      // Se existe e está expirado,  busca a página e armazena em cache.
       if(isExpired(dataFromCache)){
-        const path = absolutePath.replace('/','%')
-        const url = `${domain}%${path}`
+        const path = pathToFile.replace('/','%')
+        const nameInCache = `${domain}%${path}`
 
-        fs.rm(`./${url}`, () => {
-          console.log(`${url} was removed from cache. Time expired.\n`)
+        fs.rm(`./${nameInCache}`, () => {
+          console.log(`${nameInCache} was removed from cache. Time expired.\n`)
         })
 
-        getPage(domain, absolutePath, socketProxy)
+        getPageAndStore(domain, pathToFile, socketProxy)
         return
       }     
 
-      console.log(`${domain}/${absolutePath} already in cache\n`)
+      // Se existe no cache e não está expirado, envia o arquivo ao browser 
+      console.log(`${domain}/${pathToFile} already in cache\n`)
       socketProxy.write(dataFromCache)
       socketProxy.end()
       return
