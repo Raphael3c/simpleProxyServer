@@ -293,6 +293,7 @@ function getPageAndStore(domain, pathToFile, socketProxy){
     })   
 
     socketProxy.write(requisitionNew)
+    client.end()
   })
 
   client.on("end", () => {
@@ -315,7 +316,7 @@ proxy.on("connection", (socketProxy) => {
     let {pathToFile, domain} = handlePath(path)
 
     if(domain == ''){
-      console.log("URL invalid")
+      socketProxy.write("HTTP/1.1 404 Not Found\r\n\r\n")
       socketProxy.end()
       return
     }
