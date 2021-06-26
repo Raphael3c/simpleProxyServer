@@ -143,7 +143,6 @@ function injectHTML(dataExternalServer){
     Essa função manipula o cabeçalho e injeta o html do post-it na página requisitada. 
   */
 
-  console.log(typeof(dataExternalServer))
   let stringData = String(dataExternalServer)
   let stringDataCopy = String(dataExternalServer)
 
