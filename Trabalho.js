@@ -9,6 +9,7 @@ var COMMAND_LINE_ARGUMENT = process.argv[2]
 
 // Verifica se o tempo digitado é válido, caso não seja, seta 120 segundos por padrão.
 if(!isCorrect(COMMAND_LINE_ARGUMENT)){
+   // COLOCAR A CONDIÇÃO DE VERFICAR QUE NO MÁXIMO 120 segundos, não mais que isso 
   console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 2 minutes.`)
   COMMAND_LINE_ARGUMENT = 120
 }
@@ -21,7 +22,6 @@ function handleReq(dataFromBrowser){
     para uso futuro na aplicação. 
   */
 
-  // Obetém todo o dado recebido do navegador, converte para String e separa por linhas.
   const [firstLine, ...otherLines] = dataFromBrowser.toString().split('\n');
         
         // Obtém da primeira linha o method, path e httpVersion.
@@ -128,6 +128,11 @@ function getLocalDate(){
 }
 
 function injectHTML(dataExternalServer){
+  /*
+    injectHTML(Data) -> String
+
+    Essa função manipula o cabeçalho e injeta o html do post-it na página requisitada. 
+  */
 
   let stringData = String(dataExternalServer)
   let stringDataCopy = String(dataExternalServer)
@@ -135,7 +140,7 @@ function injectHTML(dataExternalServer){
   let requisitionNew
   let requisitionCache
 
-  //Caso o arquivo não seja um HTML.
+  // Caso o arquivo não seja um HTML.
   if(!stringData.includes('html')){
     requisitionNew = dataExternalServer
     requisitionCache = dataExternalServer
@@ -239,6 +244,11 @@ function concatenateAll(body, indexTagClosedBody, stringData, htmlToInject){
 }
 
 function getPage(domain, absolutePath, socketProxy){
+  /*
+    getPage(String, String, Socket) -> String
+
+    Obtém a página requisitada.
+  */
 
   console.log(`Searching for ${domain}/${absolutePath}  ... \n`)
   
@@ -287,7 +297,6 @@ function getPage(domain, absolutePath, socketProxy){
 }
 
 // Fluxo principal
-
 proxy.on("connection", (socketProxy) => {
   socketProxy.on('data', (dataFromBrowser) => {
     
@@ -300,26 +309,26 @@ proxy.on("connection", (socketProxy) => {
       return
     }
 
-    //Verifica se há o campo Referer no cabeçalho. 
-    //Se houver, o domínio será pego através desse campo.
+    // Verifica se há o campo Referer no cabeçalho. 
+    // Se houver, o domínio será pego através desse campo.
     if(headers.Referer){
       domain = headers.Referer.split("/")[3]
     }
 
-    //Nomeação do arquivo em cache.
+    // Nomeação do arquivo em cache.
     path = absolutePath.replace('/','%')
 
     const nameInCache = `${domain}%${path}`
 
     fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
       
-      //Se não existe, busca a página.
+      // Se não existe, busca a página.
       if(isNotFile){
         getPage(domain, absolutePath, socketProxy)
         return
       }
 
-      //Se está expirado, busca a página.
+      // Se está expirado, busca a página.
       if(isExpired(dataFromCache)){
         const path = absolutePath.replace('/','%')
         const url = `${domain}%${path}`
