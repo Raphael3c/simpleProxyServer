@@ -9,7 +9,7 @@ var COMMAND_LINE_ARGUMENT = process.argv[2]
 
 // Verifica se o tempo digitado é válido, caso não seja, seta 120 segundos por padrão.
 if(!isCorrect(COMMAND_LINE_ARGUMENT)){
-   // COLOCAR A CONDIÇÃO DE VERFICAR QUE NO MÁXIMO 120 segundos, não mais que isso 
+  // COLOCAR A CONDIÇÃO DE VERFICAR QUE NO MÁXIMO 120 segundos, não mais que isso 
   console.log(`The value passed in the commandline is invalid: ${COMMAND_LINE_ARGUMENT}. We have set the expire time to 2 minutes.`)
   COMMAND_LINE_ARGUMENT = 120
 }
@@ -50,7 +50,10 @@ function isCorrect(COMMAND_LINE_ARGUMENT){
   */
   
   let regExp = /[^0-9]/g;   
-  if(regExp.test(COMMAND_LINE_ARGUMENT) || COMMAND_LINE_ARGUMENT == undefined || COMMAND_LINE_ARGUMENT == 0){
+  if(regExp.test(COMMAND_LINE_ARGUMENT) || 
+  COMMAND_LINE_ARGUMENT == undefined || 
+  COMMAND_LINE_ARGUMENT == 0 || 
+  COMMAND_LINE_ARGUMENT > 120){
     return false
   }
 
