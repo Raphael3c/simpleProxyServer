@@ -333,9 +333,9 @@ proxy.on("connection", (socketProxy) => {
     }
 
     // Nomeação do arquivo em cache.
-    pathToFile = pathToFile.replace('/','%')
+    path = pathToFile.replace('/','%')
 
-    const nameInCache = `${domain}%${pathToFile}`
+    const nameInCache = `${domain}%${path}`
 
     fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
       
@@ -347,8 +347,8 @@ proxy.on("connection", (socketProxy) => {
 
       // Se existe e está expirado,  busca a página e armazena em cache.
       if(isExpired(dataFromCache)){
-        const path = pathToFile.replace('/','%')
-        const nameInCache = `${domain}%${path}`
+        let path = pathToFile.replace('/','%')
+        let nameInCache = `${domain}%${path}`
 
         fs.rm(`./${nameInCache}`, () => {
           console.log(`${nameInCache} was removed from cache. Time expired.\n`)
