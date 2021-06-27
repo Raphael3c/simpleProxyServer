@@ -13,6 +13,77 @@ if(!isCorrect(COMMAND_LINE_ARGUMENT)){
   COMMAND_LINE_ARGUMENT = 120
 }
 
+// Fluxo principal
+proxy.on("connection", (socketProxy) => {
+  socketProxy.on('data', (dataFromBrowser) => {
+    
+    let {method, path, headers} = handleRequisitionBrowser(dataFromBrowser)
+    let {pathToFile, domain} = handlePath(path)
+
+    if(domain == ''){
+      socketProxy.write("HTTP/1.1 404 Not Found\r\n\r\n")
+      socketProxy.end()
+      return
+    }
+
+    if(method != "GET"){
+      console.log(`Método ${method} inválido.`)
+      socketProxy.end()
+      return
+    }
+
+    // Verifica se há o campo Referer no cabeçalho. 
+    // Se houver, o domínio será pego através desse campo.
+    if(headers.Referer){
+      domain = headers.Referer.split("/")[3]
+    }
+
+    // Nomeação do arquivo em cache.
+    path = pathToFile.replace('/','%')
+
+    const nameInCache = `${domain}%${path}`
+
+    fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
+      
+      // Se não existe, busca a página e armazena em cache.
+      if(isNotFile){
+        getPageAndStore(domain, pathToFile, socketProxy)
+        return
+      }
+
+      // Se existe e está expirado,  busca a página e armazena em cache.
+      if(isExpired(dataFromCache)){
+        let path = pathToFile.replace('/','%')
+        let nameInCache = `${domain}%${path}`
+
+        fs.rm(`./${nameInCache}`, () => {
+          console.log(`${nameInCache} was removed from cache. Time expired.\n`)
+        })
+
+        getPageAndStore(domain, pathToFile, socketProxy)
+        return
+      }     
+
+      // Se existe no cache e não está expirado, envia o arquivo ao browser 
+      console.log(`${domain}/${pathToFile} already in cache\n`)
+      socketProxy.write(dataFromCache)
+      socketProxy.end()
+      return
+    })
+  })
+
+  proxy.on("end", () => {
+    console.log("Proxy terminated\n")
+  })
+
+  proxy.on("error", (err) => {
+    if(err){
+      console.log(err)
+      return
+    }
+  })
+})
+
 function handleRequisitionBrowser(dataFromBrowser){
   /*
     handleRequisitionBrowser(Data) -> {String, String, String, String} 
@@ -307,74 +378,3 @@ function getPageAndStore(domain, pathToFile, socketProxy){
     }
   })
 }
-
-// Fluxo principal
-proxy.on("connection", (socketProxy) => {
-  socketProxy.on('data', (dataFromBrowser) => {
-    
-    let {method, path, headers} = handleRequisitionBrowser(dataFromBrowser)
-    let {pathToFile, domain} = handlePath(path)
-
-    if(domain == ''){
-      socketProxy.write("HTTP/1.1 404 Not Found\r\n\r\n")
-      socketProxy.end()
-      return
-    }
-
-    if(method != "GET"){
-      console.log(`Método ${method} inválido.`)
-      socketProxy.end()
-      return
-    }
-
-    // Verifica se há o campo Referer no cabeçalho. 
-    // Se houver, o domínio será pego através desse campo.
-    if(headers.Referer){
-      domain = headers.Referer.split("/")[3]
-    }
-
-    // Nomeação do arquivo em cache.
-    path = pathToFile.replace('/','%')
-
-    const nameInCache = `${domain}%${path}`
-
-    fs.readFile(`./${nameInCache}`, (isNotFile, dataFromCache) => {
-      
-      // Se não existe, busca a página e armazena em cache.
-      if(isNotFile){
-        getPageAndStore(domain, pathToFile, socketProxy)
-        return
-      }
-
-      // Se existe e está expirado,  busca a página e armazena em cache.
-      if(isExpired(dataFromCache)){
-        let path = pathToFile.replace('/','%')
-        let nameInCache = `${domain}%${path}`
-
-        fs.rm(`./${nameInCache}`, () => {
-          console.log(`${nameInCache} was removed from cache. Time expired.\n`)
-        })
-
-        getPageAndStore(domain, pathToFile, socketProxy)
-        return
-      }     
-
-      // Se existe no cache e não está expirado, envia o arquivo ao browser 
-      console.log(`${domain}/${pathToFile} already in cache\n`)
-      socketProxy.write(dataFromCache)
-      socketProxy.end()
-      return
-    })
-  })
-
-  proxy.on("end", () => {
-    console.log("Proxy terminated\n")
-  })
-
-  proxy.on("error", (err) => {
-    if(err){
-      console.log(err)
-      return
-    }
-  })
-})
